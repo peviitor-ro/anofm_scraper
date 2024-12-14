@@ -71,20 +71,21 @@ def publish_jobs(lst):
 def main(obj):
     jobs = publish_jobs(obj)
 
-    if not jobs or isinstance(jobs, str):
+    if not jobs:
         return
     
-    for job in jobs:
-        job["published"] = True
+    if isinstance(jobs, list):
+      for job in jobs:
+          job["published"] = True
 
-    url = "https://api.laurentiumarian.ro/jobs/publish/"
-    headers["Authorization"] = f"Bearer {TOKEN}"
-    restponse = requests.post(url, json=jobs, headers=headers)
+      url = "https://api.laurentiumarian.ro/jobs/publish/"
+      headers["Authorization"] = f"Bearer {TOKEN}"
+      restponse = requests.post(url, json=jobs, headers=headers)
 
-    if restponse.status_code == 200:
-        print(f"Jobs published successfully for company {obj[0].get('company')}")
-    else:
-        print(f"Jobs not published for company {obj[0].get('company')}")
+      if restponse.status_code == 200:
+          print(f"Jobs published successfully for company {obj[0].get('company')}")
+      else:
+          print(f"Jobs not published for company {obj[0].get('company')}")
 
 # Start a thread for each company
 for company_id, jobs in companies.items():
