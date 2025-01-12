@@ -1,13 +1,7 @@
 import requests
 from threading import Thread
 import time
-from utils import remove_diacritics, get_token
-
-# Headers for the requests
-headers = {
-    "Content-Type": "application/json",
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3",
-}
+from utils import remove_diacritics, get_token, main
 
 url = "https://mediere.anofm.ro/api/entity/vw_public_job_posting"
 json = requests.get(url).json().get("rows")
@@ -33,40 +27,8 @@ for job in json:
 
 TOKEN = get_token()
 
-# Publish the jobs to the API
-def publish_jobs(lst):
-    url = "https://api.peviitor.ro/v5/add/"
-    headers["Authorization"] = f"Bearer {TOKEN}"
-
-    response = requests.post(url, json=lst, headers=headers)
-
-    try:
-        return response.json()
-    except:
-        return []
-
-# Main function
-def main(obj):
-    jobs = publish_jobs(obj)
-
-    if not jobs:
-        return
-    
-    if isinstance(jobs, list):
-      for job in jobs:
-          job["published"] = True
-
-      url = "https://api.laurentiumarian.ro/jobs/publish/"
-      headers["Authorization"] = f"Bearer {TOKEN}"
-      restponse = requests.post(url, json=jobs, headers=headers)
-
-      if restponse.status_code == 200:
-          print(f"Jobs published successfully for company {obj[0].get('company')}")
-      else:
-          print(f"Jobs not published for company {obj[0].get('company')}")
-
 # Start a thread for each company
 for company_id, jobs in companies.items():
-    t = Thread(target=main, args=(jobs,))
+    t = Thread(target=main, args=(jobs, TOKEN))
     t.start()
     time.sleep(0.5)

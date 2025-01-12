@@ -26,3 +26,81 @@ def get_token():
     response = requests.post(url, json=payload, headers=headers)
 
     return response.json().get("access")
+
+# Publish the jobs to the API
+def publish_jobs(lst, token):
+    url = "https://api.peviitor.ro/v5/add/"
+    headers["Authorization"] = f"Bearer {token}"
+
+    response = requests.post(url, json=lst, headers=headers)
+
+    try:
+        return response.json()
+    except:
+        return []
+    
+  # Main function
+def main(obj, token):
+    jobs = publish_jobs(obj, token)
+
+    if not jobs:
+        return
+    
+    if isinstance(jobs, list):
+      for job in jobs:
+          job["published"] = True
+
+      url = "https://api.laurentiumarian.ro/jobs/publish/"
+      headers["Authorization"] = f"Bearer {token}"
+      restponse = requests.post(url, json=jobs, headers=headers)
+
+      if restponse.status_code == 200:
+          print(f"Jobs published successfully for company {obj[0].get('company')}")
+      else:
+          print(f"Jobs not published for company {obj[0].get('company')}")
+
+
+class GetCounty:
+    _counties = []
+
+    def get_county(self, city):
+
+        for county in self.counties:
+            if county.get("city") == city:
+                return county.get("county")
+            
+        api_endpoint = f"https://api.laurentiumarian.ro/orase/?search={remove_diacritics(city)}&page_size=50"
+        counties_found = []
+
+        response = requests.get(api_endpoint).json()
+
+        while response and response.get("next"):
+            counties_found.extend(response.get("results"))
+            response = requests.get(response.get("next")).json()
+        else:
+            if response:
+                counties_found.extend(response.get("results"))
+
+        self.counties.append(
+            {
+                "city": city,
+                "county": [
+                    item.get("county")
+                    for item in counties_found
+                    if item.get("name").lower()
+                      == remove_diacritics(city.lower())
+                ],
+            }
+        )
+
+        return self.counties[-1].get("county") if self.counties[-1].get("county") else None
+    
+    @property
+    def counties(self):
+        return self._counties
+    
+    @counties.setter
+    def counties(self, value):
+        self._counties.extend(value)
+
+
