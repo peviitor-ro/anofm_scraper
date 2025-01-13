@@ -55,7 +55,7 @@ def main(obj, token):
       restponse = requests.post(url, json=jobs, headers=headers)
 
       if restponse.status_code == 200:
-          print(f"Jobs published successfully for company {obj[0].get('company')}")
+          print(f"{len(jobs)} jobs published successfully for company {obj[0].get('company')}")
       else:
           print(f"Jobs not published for company {obj[0].get('company')}")
 
