@@ -1,4 +1,4 @@
-name: General point run Scraper
+name: ANOFM General point run Scraper
 
 on:
   schedule:
