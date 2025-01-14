@@ -40,7 +40,7 @@ while json:
             if county:
                 counties.extend(county)
 
-        remote = "Remote" if "Remote" in location else []
+        remote = ["remote"] if "Remote" in location else []
         if job.get("company").get("id") in companies:
             obj = {
                 "job_title": job.get("title"),

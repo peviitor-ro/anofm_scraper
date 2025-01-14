@@ -34,7 +34,7 @@ for job in json:
         if county:
             counties.extend(county)
 
-    remote = "Remote" if "De la distanta" in location else []
+    remote = ["remote"] if "De la distanta" in location else []
 
     if job.get("companyName") in companies:
         obj = {
