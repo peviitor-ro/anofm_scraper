@@ -1,4 +1,4 @@
-name: General point run Scraper
+name: BESTJOBS General point run Scraper
 
 on:
   schedule:
