@@ -1,4 +1,4 @@
-name: General point run Scraper
+name: OLX General point run Scraper
 
 on:
   schedule:
