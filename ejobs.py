@@ -50,7 +50,7 @@ while json:
                 "county": list(set(counties)),
                 "company": job.get("company").get("name"),
                 "remote": remote,
-                "sursa": "EJOBS"
+                "source": "EJOBS"
             }
             companies[job.get("company").get("id")]["jobs"].append(obj)
 

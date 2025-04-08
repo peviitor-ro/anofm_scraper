@@ -21,7 +21,7 @@ for job in json:
         "city": remove_diacritics(job.get("address_locality_name").split(">")[-1].strip()).capitalize(),
         "county": remove_diacritics(job.get("address_locality_name").split(">")[0].strip()).replace("Municipiul", "").strip(),
         "company": job.get("employer_name"),
-        "sursa":"ANOFM"
+        "source": "ANOFM"
     }
 
     companies[job.get("employer_id")].append(obj)
