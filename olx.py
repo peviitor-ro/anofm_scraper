@@ -35,7 +35,8 @@ while next_page:
             "country": "Romania",
             "city": location,
             "county": county,
-            "company": company
+            "company": company,
+            "sursa": "OLX"
         }
         companies[company]["jobs"].append(obj)
 

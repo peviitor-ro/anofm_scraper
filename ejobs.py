@@ -49,7 +49,8 @@ while json:
                 "city": location,
                 "county": list(set(counties)),
                 "company": job.get("company").get("name"),
-                "remote": remote
+                "remote": remote,
+                "sursa": "EJOBS"
             }
             companies[job.get("company").get("id")]["jobs"].append(obj)
 
