@@ -44,7 +44,8 @@ for job in json:
             "city": location,
             "county": list(set(counties)),
             "company": job.get("companyName"),
-            "remote": remote
+            "remote": remote,
+            "source": "BESTJOBS"
         }
         companies[job.get("companyName")]["jobs"].append(obj)
 
