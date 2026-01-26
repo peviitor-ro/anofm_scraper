@@ -1,6 +1,5 @@
 import requests
-from threading import Thread
-import time
+from concurrent.futures import ThreadPoolExecutor
 from utils import remove_diacritics, get_token, main
 
 url = "https://mediere.anofm.ro/api/entity/vw_public_job_posting"
@@ -28,8 +27,7 @@ for job in json:
 
 TOKEN = get_token()
 
-# Start a thread for each company
-for company_id, jobs in companies.items():
-    t = Thread(target=main, args=(jobs, TOKEN))
-    t.start()
-    time.sleep(0.5)
+MAX_WORKERS = 5
+with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+    for company_id, jobs in companies.items():
+        executor.submit(main, jobs, TOKEN)

@@ -1,7 +1,6 @@
 import requests
-from threading import Thread
+from concurrent.futures import ThreadPoolExecutor
 from utils import get_token, GetCounty, main, remove_diacritics
-import time
 
 _counties = GetCounty()
 
@@ -58,10 +57,11 @@ def start(jobs):
             json=[{"id": jobs.get("name"), "logo": jobs.get("logo")}],
         )
 
-for company_id, jobs in companies.items():
-    t = Thread(target=start, args=(jobs,))
-    t.start()
-    time.sleep(0.5)
+
+MAX_WORKERS = 5
+with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+    for company_id, jobs in companies.items():
+        executor.submit(start, jobs)
 
 
 

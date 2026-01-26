@@ -1,8 +1,7 @@
 import requests
 from bs4 import BeautifulSoup
 from utils import get_token, GetCounty, main, remove_diacritics
-from threading import Thread
-import time
+from concurrent.futures import ThreadPoolExecutor
 
 _counties = GetCounty()
 
@@ -63,7 +62,7 @@ def start(jobs):
             json=[{"id": jobs.get("name"), "logo": jobs.get("logo")}],
         )
 
-for company_id, jobs in company_jobs.items():
-    t = Thread(target=start, args=(jobs,))
-    t.start()
-    time.sleep(0.5)  # To avoid overwhelming the server with requests
+MAX_WORKERS = 5
+with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+    for company_id, jobs in company_jobs.items():
+        executor.submit(start, jobs)
