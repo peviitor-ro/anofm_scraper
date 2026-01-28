@@ -52,12 +52,37 @@ def main(obj, token):
 
       url = "https://api.laurentiumarian.ro/jobs/publish/"
       headers["Authorization"] = f"Bearer {token}"
-      restponse = requests.post(url, json=jobs, headers=headers)
+      response = requests.post(url, json=jobs, headers=headers)
 
-      if restponse.status_code == 200:
+      if response.status_code == 200:
           print(f"{len(jobs)} jobs published successfully for company {obj[0].get('company')}")
       else:
           print(f"Jobs not published for company {obj[0].get('company')}")
+
+
+def remove_company(company_name: str, token: str):
+    """
+    Remove a company via the API and return the parsed JSON response.
+    Raises requests.RequestException on network/HTTP errors.
+    """
+    url = "https://api.laurentiumarian.ro/companies/delete/"
+    headers_local = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {token}",
+    }
+    payload = {"company": company_name}
+
+    try:
+        response = requests.post(url, json=payload, headers=headers_local)
+        response.raise_for_status()
+    except requests.RequestException as e:
+        print(f"Error removing company '{company_name}': {e}")
+
+    try:
+        return response.json()
+    except ValueError:
+        # If the response is not JSON, return a simple fallback with status and text
+        return {"status_code": response.status_code, "text": response.text}
 
 
 class GetCounty:

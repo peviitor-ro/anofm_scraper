@@ -1,6 +1,6 @@
 import requests
 from concurrent.futures import ThreadPoolExecutor
-from utils import get_token, GetCounty, main, remove_diacritics
+from utils import get_token, GetCounty, main, remove_diacritics, remove_company
 
 _counties = GetCounty()
 
@@ -57,7 +57,7 @@ def start(jobs):
             json=[{"id": jobs.get("name"), "logo": jobs.get("logo")}],
         )
 
-
+remove_company("OLX", TOKEN)
 MAX_WORKERS = 5
 with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
     for company_id, jobs in companies.items():
