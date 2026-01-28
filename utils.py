@@ -1,6 +1,10 @@
 import unicodedata
 import requests
 
+import os
+from dotenv import load_dotenv
+load_dotenv()
+
 # Check if a character has diacritics
 def has_diacritics(char):
     return any(unicodedata.combining(c) for c in char)
@@ -65,7 +69,8 @@ def remove_company(company_name: str, token: str):
     Remove a company via the API and return the parsed JSON response.
     Raises requests.RequestException on network/HTTP errors.
     """
-    url = "https://api.laurentiumarian.ro/companies/delete/"
+
+    url = os.getenv("SERVER_URL")
     headers_local = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {token}",
