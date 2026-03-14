@@ -22,7 +22,7 @@ headers = {
 
 # Get the token from the API
 def get_token():
-    url = "https://api.peviitor.ro/v5/get_token/"
+    url = "https://api.laurentiumarian.ro/get_token"
     payload = {
         "email": "contact@laurentiumarian.ro"
     }
@@ -33,7 +33,7 @@ def get_token():
 
 # Publish the jobs to the API
 def publish_jobs(lst, token):
-    url = "https://api.peviitor.ro/v5/add/"
+    url = "https://api.laurentiumarian.ro/jobs/add/"
     headers["Authorization"] = f"Bearer {token}"
 
     response = requests.post(url, json=lst, headers=headers)
@@ -65,28 +65,34 @@ def main(obj, token):
 
 
 def remove_company(company_name: str, token: str):
-    """
-    Remove a company via the API and return the parsed JSON response.
-    Raises requests.RequestException on network/HTTP errors.
-    """
+    server_url = os.getenv("SERVER_URL")
 
-    url = os.getenv("SERVER_URL")
+    if not server_url:
+        print(f"Error removing company '{company_name}': SERVER_URL is not set")
+        return None
+
+    url = server_url
+
     headers_local = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {token}",
     }
     payload = {"company": company_name}
+    response = None
 
     try:
         response = requests.post(url, json=payload, headers=headers_local)
         response.raise_for_status()
     except requests.RequestException as e:
         print(f"Error removing company '{company_name}': {e}")
+        return None
+
+    if response is None:
+        return None
 
     try:
         return response.json()
     except ValueError:
-        # If the response is not JSON, return a simple fallback with status and text
         return {"status_code": response.status_code, "text": response.text}
 
 

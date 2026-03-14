@@ -4,6 +4,26 @@ from utils import get_token, GetCounty, main, remove_diacritics, remove_company
 
 _counties = GetCounty()
 
+
+def parse_salary(job):
+    salary = next((param.get("value") for param in job.get("params", []) if param.get("key") == "salary"), None)
+
+    if not salary:
+        return {}
+
+    salary_data = {}
+
+    if salary.get("from") is not None:
+        salary_data["salary_min"] = int(salary.get("from"))
+
+    if salary.get("to") is not None:
+        salary_data["salary_max"] = int(salary.get("to"))
+
+    if salary.get("currency") and (salary.get("from") is not None or salary.get("to") is not None):
+        salary_data["salary_currency"] = salary.get("currency")
+
+    return salary_data
+
 url = "https://www.olx.ro/api/v1/offers/?offset=0&limit=50&category_id=4&currency=RON&filter_refiners=spell_checker&sl=194568119cax1c7511aa"
 json = requests.get(url).json()
 
@@ -31,6 +51,7 @@ while next_page:
         obj = {
             "job_title": job.get("title"),
             "job_link": job.get("url"),
+            **parse_salary(job),
             "country": "Romania",
             "city": location,
             "county": county,

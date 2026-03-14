@@ -17,6 +17,19 @@ pages = ceil(response.get("totalScrapedJobs", 0)
              / payload["limit"])
 
 company_jobs = {}
+
+
+def ensure_company(company_name, logo=None):
+    if company_name not in company_jobs:
+        company_jobs[company_name] = {
+            "logo": logo,
+            "name": company_name,
+            "jobs": []
+        }
+    elif logo and not company_jobs[company_name].get("logo"):
+        company_jobs[company_name]["logo"] = logo
+
+
 while payload["page"] <= pages:
     for job in response.get("scrapedJobs", []):
         job_title = job.get("title")
@@ -39,12 +52,34 @@ while payload["page"] <= pages:
                 "source": "EDUJOBS"
             }
 
-            if company_name not in company_jobs:
-                company_jobs[company_name] = {
-                    "logo": None,
-                    "name": company_name,
-                    "jobs": []
-                }
+            ensure_company(company_name)
+            company_jobs[company_name]["jobs"].append(job_data)
+
+    for job in response.get("jobPostings", []):
+        job_title = job.get("title")
+        job_link = f"https://edujobs.ro/job-page/{job.get('id')}"
+        company_name = job.get("company", {}).get("name")
+        logo = job.get("logo")
+
+        try:
+            city = remove_diacritics(job.get("location").split(",")[0].strip())
+            county = _counties.get_county(city)
+        except AttributeError:
+            city = []
+            county = []
+
+        if job_title and company_name:
+            job_data = {
+                "job_title": job_title,
+                "job_link": job_link,
+                "country": "Romania",
+                "city": city,
+                "county": county,
+                "company": company_name,
+                "source": "EDUJOBS"
+            }
+
+            ensure_company(company_name, logo)
             company_jobs[company_name]["jobs"].append(job_data)
 
     print(f"Page {payload['page']} of {pages} scraped.")

@@ -5,6 +5,27 @@ from citieseJobs import cities
 
 _counties = GetCounty()
 
+
+def parse_salary(salary):
+    if not salary:
+        return {}
+
+    parts = salary.split()
+    if len(parts) < 2:
+        return {}
+
+    salary_data = {"salary_currency": parts[-1]}
+    values = " ".join(parts[:-1])
+
+    if " - " in values:
+        salary_min, salary_max = values.split(" - ", 1)
+        salary_data["salary_min"] = int(salary_min.strip())
+        salary_data["salary_max"] = int(salary_max.strip())
+    else:
+        salary_data["salary_min"] = int(values.strip())
+
+    return salary_data
+
 # Headers for the requests
 headers = {
     "Content-Type": "application/json",
@@ -44,6 +65,7 @@ while json:
             obj = {
                 "job_title": job.get("title"),
                 "job_link": f"https://www.ejobs.ro/user/locuri-de-munca/{job.get('slug')}/{job.get('id')}",
+                **parse_salary(job.get("salary")),
                 "country": "Romania",
                 "city": location,
                 "county": list(set(counties)),

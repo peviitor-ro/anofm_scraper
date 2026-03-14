@@ -16,6 +16,9 @@ for job in json:
     obj = {
         "job_title": job.get("occupation"),
         "job_link": "https://mediere.anofm.ro/app/module/mediere/job/" + str(job.get("id")),
+        **({"salary_min": int(float(job.get("minimum_salary")))} if job.get("minimum_salary") else {}),
+        **({"salary_max": int(float(job.get("maximum_salary")))} if job.get("maximum_salary") else {}),
+        **({"salary_currency": "RON"} if job.get("minimum_salary") or job.get("maximum_salary") else {}),
         "country": "Romania",
         "city": remove_diacritics(job.get("address_locality_name").split(">")[-1].strip()).capitalize(),
         "county": remove_diacritics(job.get("address_locality_name").split(">")[0].strip()).replace("Municipiul", "").strip(),

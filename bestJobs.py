@@ -5,6 +5,26 @@ from utils import get_token, GetCounty, main, remove_diacritics
 _counties = GetCounty()
 
 
+def parse_salary(job):
+    salary = job.get("salary") or job.get("estimatedSalary")
+
+    if not salary:
+        return {}
+
+    salary_data = {}
+
+    if " - " in salary:
+        salary_min, salary_max = salary.split(" - ", 1)
+        salary_data["salary_min"] = int(salary_min.strip())
+        salary_data["salary_max"] = int(salary_max.strip())
+    else:
+        salary_data["salary_min"] = int(salary.strip())
+
+    salary_data["salary_currency"] = "EUR"
+
+    return salary_data
+
+
 url = "https://api.bestjobs.eu/v1/jobs?offset=0&limit=10000&"
 
 json = requests.get(url).json().get("items")
@@ -39,6 +59,7 @@ for job in json:
         obj = {
             "job_title": job.get("title"),
             "job_link": f"https://www.bestjobs.eu/loc-de-munca/{job.get('slug')}",
+            **parse_salary(job),
             "country": "Romania",
             "city": location,
             "county": list(set(counties)),
