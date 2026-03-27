@@ -1,8 +1,8 @@
-name: OLX General point run Scraper
+name: Publi24 General point run Scraper
 
 on:
   schedule:
-    - cron: '00 02 * * *'
+    - cron: '00 03 * * *'
   workflow_dispatch:
 
 permissions:
@@ -29,4 +29,4 @@ jobs:
       env:
         SERVER_URL: ${{ vars.SERVER_URL }}
       run: |
-        python3 olx.py
+        python3 publi24.py

@@ -2,7 +2,7 @@ name: HIPO General point run Scraper
 
 on:
   schedule:
-    - cron: '06 00 * * *'
+    - cron: '30 01 * * *'
   workflow_dispatch:
 
 permissions:

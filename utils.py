@@ -6,13 +6,18 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Check if a character has diacritics
+
+
 def has_diacritics(char):
     return any(unicodedata.combining(c) for c in char)
 
 # Remove diacritics from a string
+
+
 def remove_diacritics(input_string):
     normalized_string = unicodedata.normalize("NFD", input_string)
     return "".join(char for char in normalized_string if not has_diacritics(char))
+
 
 # Headers for the requests
 headers = {
@@ -21,6 +26,8 @@ headers = {
 }
 
 # Get the token from the API
+
+
 def get_token():
     url = "https://api.laurentiumarian.ro/get_token"
     payload = {
@@ -32,8 +39,13 @@ def get_token():
     return response.json().get("access")
 
 # Publish the jobs to the API
-def publish_jobs(lst, token):
-    url = "https://api.laurentiumarian.ro/jobs/add/"
+
+
+def publish_jobs(lst, token, user=False):
+    if user:
+        url = "https://api.laurentiumarian.ro/jobs/user-add/"
+    else:
+        url = "https://api.laurentiumarian.ro/jobs/add/"
     headers["Authorization"] = f"Bearer {token}"
 
     response = requests.post(url, json=lst, headers=headers)
@@ -42,33 +54,38 @@ def publish_jobs(lst, token):
         return response.json()
     except:
         return []
-    
+
   # Main function
-def main(obj, token):
-    jobs = publish_jobs(obj, token)
+
+
+def main(obj, token, user=False):
+    jobs = publish_jobs(obj, token, user=user)
 
     if not jobs:
         return
-    
+
     if isinstance(jobs, list):
-      for job in jobs:
-          job["published"] = True
+        for job in jobs:
+            job["published"] = True
 
-      url = "https://api.laurentiumarian.ro/jobs/publish/"
-      headers["Authorization"] = f"Bearer {token}"
-      response = requests.post(url, json=jobs, headers=headers)
+        url = "https://api.laurentiumarian.ro/jobs/publish/"
 
-      if response.status_code == 200:
-          print(f"{len(jobs)} jobs published successfully for company {obj[0].get('company')}")
-      else:
-          print(f"Jobs not published for company {obj[0].get('company')}")
+        headers["Authorization"] = f"Bearer {token}"
+        response = requests.post(url, json=jobs, headers=headers)
+
+        if response.status_code == 200:
+            print(
+                f"{len(jobs)} jobs published successfully for company {obj[0].get('company')}")
+        else:
+            print(f"Jobs not published for company {obj[0].get('company')}")
 
 
 def remove_company(company_name: str, token: str):
     server_url = os.getenv("SERVER_URL")
 
     if not server_url:
-        print(f"Error removing company '{company_name}': SERVER_URL is not set")
+        print(
+            f"Error removing company '{company_name}': SERVER_URL is not set")
         return None
 
     url = server_url
@@ -104,7 +121,7 @@ class GetCounty:
         for county in self.counties:
             if county.get("city") == city:
                 return county.get("county")
-            
+
         api_endpoint = f"https://api.laurentiumarian.ro/orase/?search={remove_diacritics(city)}&page_size=50"
         counties_found = []
 
@@ -124,19 +141,17 @@ class GetCounty:
                     item.get("county")
                     for item in counties_found
                     if item.get("name").lower()
-                      == remove_diacritics(city.lower())
+                    == remove_diacritics(city.lower())
                 ],
             }
         )
 
         return self.counties[-1].get("county") if self.counties[-1].get("county") else None
-    
+
     @property
     def counties(self):
         return self._counties
-    
+
     @counties.setter
     def counties(self, value):
         self._counties.extend(value)
-
-
