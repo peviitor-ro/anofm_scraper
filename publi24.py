@@ -3,8 +3,103 @@ from concurrent.futures import ThreadPoolExecutor
 from bs4 import BeautifulSoup
 from utils import get_token, GetCounty, main, remove_diacritics, remove_company
 import time
+import re
 
 _counties = GetCounty()
+
+
+def is_job_listing(title, description, link):
+    text = remove_diacritics(f"{title} {description}".lower())
+    normalized_link = remove_diacritics((link or "").lower())
+    words = set(re.findall(r"[a-z0-9]+", text))
+
+    positive_words = {
+        "angajez",
+        "angajeaza",
+        "angajam",
+        "angajare",
+        "job",
+        "salariu",
+        "cv",
+        "experienta",
+        "operator",
+        "sofer",
+        "muncitor",
+        "lucrator",
+        "consilier",
+        "inginer",
+        "electrician",
+        "asistent",
+        "bucatar",
+        "ospatar",
+        "curier",
+        "manipulant",
+        "tehnician",
+        "contabil",
+        "recrutam",
+        "recrutare",
+    }
+
+    positive_phrases = [
+        "loc de munca",
+        "full time",
+        "part time",
+        "program de lucru",
+        "trimite cv",
+        "cautam coleg",
+        "cautam colegi",
+    ]
+
+    negative_words = {
+        "vand",
+        "vanzare",
+        "cumpar",
+        "inchiriez",
+        "inchiriere",
+        "rate",
+        "leasing",
+        "negociabil",
+        "telefon",
+        "laptop",
+        "iphone",
+        "samsung",
+        "apartament",
+        "garsoniera",
+        "teren",
+        "casa",
+        "auto",
+        "masina",
+        "motocicleta",
+        "bicicleta",
+    }
+
+    negative_phrases = [
+        "de vanzare",
+        "schimb cu",
+        "ofer servicii",
+        "prestari servicii",
+        "transport marfa",
+    ]
+
+    negative_link_markers = [
+        "/auto-moto/",
+        "/imobiliare/",
+        "/electronice/",
+        "/telefoane/",
+        "/laptop-pc-tablete/",
+        "/servicii/",
+    ]
+
+    if any(marker in normalized_link for marker in negative_link_markers):
+        return False
+
+    positive_score = sum(word in words for word in positive_words)
+    positive_score += sum(phrase in text for phrase in positive_phrases)
+
+    negative_score = sum(word in words for word in negative_words)
+    negative_score += sum(phrase in text for phrase in negative_phrases)
+
+    return positive_score >= 1 and negative_score == 0
 
 
 def parse_publi24_listing(article, base_url="https://www.publi24.ro"):
@@ -36,6 +131,9 @@ def parse_publi24_listing(article, base_url="https://www.publi24.ro"):
 
         description_elem = article.select_one('.article-description')
         description = description_elem.text.strip() if description_elem else ""
+
+        if not is_job_listing(title, description, link):
+            return None
 
         remote = []
         if "remote" in description.lower() or "de la distanta" in description.lower() or "la domiciliu" in description.lower():
