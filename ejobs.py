@@ -1,4 +1,5 @@
 import requests
+import re
 from concurrent.futures import ThreadPoolExecutor
 from utils import get_token, GetCounty, main
 from citieseJobs import cities
@@ -14,15 +15,34 @@ def parse_salary(salary):
     if len(parts) < 2:
         return {}
 
-    salary_data = {"salary_currency": parts[-1]}
+    salary_data = {}
     values = " ".join(parts[:-1])
+    currency = parts[-1].upper()
+
+    def extract_amount(value):
+        match = re.search(r"\d[\d\.,]*", value or "")
+        if not match:
+            return None
+
+        return int(match.group(0).replace(".", "").replace(",", ""))
 
     if " - " in values:
         salary_min, salary_max = values.split(" - ", 1)
-        salary_data["salary_min"] = int(salary_min.strip())
-        salary_data["salary_max"] = int(salary_max.strip())
+        parsed_min = extract_amount(salary_min)
+        parsed_max = extract_amount(salary_max)
+
+        if parsed_min is not None:
+            salary_data["salary_min"] = parsed_min
+
+        if parsed_max is not None:
+            salary_data["salary_max"] = parsed_max
     else:
-        salary_data["salary_min"] = int(values.strip())
+        parsed_value = extract_amount(values)
+        if parsed_value is not None:
+            salary_data["salary_min"] = parsed_value
+
+    if salary_data:
+        salary_data["salary_currency"] = currency
 
     return salary_data
 
