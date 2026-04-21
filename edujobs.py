@@ -2,7 +2,6 @@ import requests
 from bs4 import BeautifulSoup
 from utils import get_token, GetCounty, main, remove_diacritics, remove_company
 from concurrent.futures import ThreadPoolExecutor
-from math import ceil
 import time
 
 _counties = GetCounty()
@@ -13,9 +12,6 @@ payload = {"page": 1, "limit": 99}
 
 
 response = requests.request("POST", url, data=payload).json()
-
-pages = ceil(response.get("totalScrapedJobs", 0)
-             / payload["limit"])
 
 company_jobs = {}
 
@@ -31,32 +27,13 @@ def ensure_company(company_name, logo=None):
         company_jobs[company_name]["logo"] = logo
 
 
-while payload["page"] <= pages:
-    for job in response.get("scrapedJobs", []):
-        job_title = job.get("title")
-        job_link = job.get("originalUrl")
-        company_name = "Edujobs"
-        try:
-            city = remove_diacritics(job.get("location").split(",")[0].strip())
-            county = _counties.get_county(city)
-        except AttributeError:
-            city = []
-            county = []
-        if job_title and job_link:
-            job_data = {
-                "job_title": job_title,
-                "job_link": job_link,
-                "country": "Romania",
-                "city": city,
-                "county": county,
-                "company": company_name,
-                "source": "EDUJOBS"
-            }
+while True:
+    page_jobs = response.get("jobPostings", [])
+    if not page_jobs:
+        print(f"No job postings found on page {payload['page']}. Stopping.")
+        break
 
-            ensure_company(company_name)
-            company_jobs[company_name]["jobs"].append(job_data)
-
-    for job in response.get("jobPostings", []):
+    for job in page_jobs:
         job_title = job.get("title")
         job_link = f"https://edujobs.ro/job-page/{job.get('id')}"
         company_name = job.get("company", {}).get("name")
@@ -83,7 +60,7 @@ while payload["page"] <= pages:
             ensure_company(company_name, logo)
             company_jobs[company_name]["jobs"].append(job_data)
 
-    print(f"Page {payload['page']} of {pages} scraped.")
+    print(f"Page {payload['page']} scraped.")
     payload["page"] += 1
     response = requests.request("POST", url, data=payload).json()
 
