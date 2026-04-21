@@ -33,7 +33,7 @@ def ensure_company(company_name, logo=None):
 while payload["page"] <= pages:
     for job in response.get("scrapedJobs", []):
         job_title = job.get("title")
-        job_link = f"https://edujobs.ro/job-page/{job.get('scrapedJobId')}"
+        job_link = job.get("originalUrl")
         company_name = "Edujobs"
         try:
             city = remove_diacritics(job.get("location").split(",")[0].strip())
@@ -41,7 +41,7 @@ while payload["page"] <= pages:
         except AttributeError:
             city = []
             county = []
-        if job_title:
+        if job_title and job_link:
             job_data = {
                 "job_title": job_title,
                 "job_link": job_link,
