@@ -3,6 +3,7 @@ from bs4 import BeautifulSoup
 from utils import get_token, GetCounty, main, remove_diacritics, remove_company
 from concurrent.futures import ThreadPoolExecutor
 from math import ceil
+import time
 
 _counties = GetCounty()
 
@@ -89,7 +90,20 @@ while payload["page"] <= pages:
 TOKEN = get_token()
 
 def start(jobs):
-    main(jobs.get("jobs"), TOKEN)
+    if jobs.get("jobs"):
+        all_jobs = jobs.get("jobs")
+        batch_size = 100
+
+        total_batches = (len(all_jobs) + batch_size - 1) // batch_size
+        print(f"Processing {len(all_jobs)} jobs in {total_batches} batches...")
+
+        for i in range(0, len(all_jobs), batch_size):
+            batch = all_jobs[i:i + batch_size]
+            batch_num = i // batch_size + 1
+            print(f"Sending batch {batch_num}/{total_batches} ({len(batch)} jobs)...")
+            main(batch, TOKEN, user=True)
+            time.sleep(2)
+
     if jobs.get("logo"):
         content_type = "application/json"
         requests.post(
