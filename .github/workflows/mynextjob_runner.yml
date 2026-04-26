@@ -1,8 +1,8 @@
-name: Publi24 General point run Scraper
+name: MYNEXTJOB General point run Scraper
 
 on:
   schedule:
-    - cron: '30 04 * * *'
+    - cron: '00 04 * * *'
   workflow_dispatch:
 
 permissions:
@@ -26,7 +26,5 @@ jobs:
         pip3 install -r requirements.txt
 
     - name: Run Scraper
-      env:
-        SERVER_URL: ${{ vars.SERVER_URL }}
       run: |
-        python3 publi24.py
+        python3 mynextjob.py
