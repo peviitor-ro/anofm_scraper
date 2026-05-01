@@ -2,7 +2,7 @@ import requests
 from bs4 import BeautifulSoup
 from utils import get_token, GetCounty, main, remove_diacritics, remove_company
 from concurrent.futures import ThreadPoolExecutor
-from math import ceil
+import time
 
 _counties = GetCounty()
 
@@ -12,9 +12,6 @@ payload = {"page": 1, "limit": 99}
 
 
 response = requests.request("POST", url, data=payload).json()
-
-pages = ceil(response.get("totalScrapedJobs", 0)
-             / payload["limit"])
 
 company_jobs = {}
 
@@ -30,32 +27,13 @@ def ensure_company(company_name, logo=None):
         company_jobs[company_name]["logo"] = logo
 
 
-while payload["page"] <= pages:
-    for job in response.get("scrapedJobs", []):
-        job_title = job.get("title")
-        job_link = f"https://edujobs.ro/job-page/{job.get('scrapedJobId')}"
-        company_name = "Edujobs"
-        try:
-            city = remove_diacritics(job.get("location").split(",")[0].strip())
-            county = _counties.get_county(city)
-        except AttributeError:
-            city = []
-            county = []
-        if job_title:
-            job_data = {
-                "job_title": job_title,
-                "job_link": job_link,
-                "country": "Romania",
-                "city": city,
-                "county": county,
-                "company": company_name,
-                "source": "EDUJOBS"
-            }
+while True:
+    page_jobs = response.get("jobPostings", [])
+    if not page_jobs:
+        print(f"No job postings found on page {payload['page']}. Stopping.")
+        break
 
-            ensure_company(company_name)
-            company_jobs[company_name]["jobs"].append(job_data)
-
-    for job in response.get("jobPostings", []):
+    for job in page_jobs:
         job_title = job.get("title")
         job_link = f"https://edujobs.ro/job-page/{job.get('id')}"
         company_name = job.get("company", {}).get("name")
@@ -82,14 +60,27 @@ while payload["page"] <= pages:
             ensure_company(company_name, logo)
             company_jobs[company_name]["jobs"].append(job_data)
 
-    print(f"Page {payload['page']} of {pages} scraped.")
+    print(f"Page {payload['page']} scraped.")
     payload["page"] += 1
     response = requests.request("POST", url, data=payload).json()
 
 TOKEN = get_token()
 
 def start(jobs):
-    main(jobs.get("jobs"), TOKEN)
+    if jobs.get("jobs"):
+        all_jobs = jobs.get("jobs")
+        batch_size = 100
+
+        total_batches = (len(all_jobs) + batch_size - 1) // batch_size
+        print(f"Processing {len(all_jobs)} jobs in {total_batches} batches...")
+
+        for i in range(0, len(all_jobs), batch_size):
+            batch = all_jobs[i:i + batch_size]
+            batch_num = i // batch_size + 1
+            print(f"Sending batch {batch_num}/{total_batches} ({len(batch)} jobs)...")
+            main(batch, TOKEN, user=True)
+            time.sleep(2)
+
     if jobs.get("logo"):
         content_type = "application/json"
         requests.post(
