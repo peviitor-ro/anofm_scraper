@@ -1,8 +1,13 @@
+import random
 import requests
+import time
 from concurrent.futures import ThreadPoolExecutor
 from utils import get_token, GetCounty, main, remove_diacritics
 
 _counties = GetCounty()
+REQUEST_DELAY_MIN = 1
+REQUEST_DELAY_MAX = 2.5
+PAGE_SIZE = 200
 
 
 def parse_salary(job):
@@ -25,15 +30,34 @@ def parse_salary(job):
     return salary_data
 
 
-url = "https://api.bestjobs.eu/v1/jobs?offset=0&limit=10000&"
+json = []
+offset = 0
 
-try:
-    response = requests.get(url)
-    response.raise_for_status()
-    json = response.json().get("items") or []
-except (requests.exceptions.RequestException, requests.exceptions.JSONDecodeError) as e:
-    print(f"Failed to fetch jobs: {e}")
-    json = []
+while True:
+    url = f"https://api.bestjobs.eu/v1/jobs?offset={offset}&limit={PAGE_SIZE}&"
+
+    try:
+        print(f"Fetching BestJobs page with offset={offset}, limit={PAGE_SIZE}...")
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        items = response.json().get("items") or []
+    except (requests.exceptions.RequestException, requests.exceptions.JSONDecodeError) as e:
+        print(f"Failed to fetch jobs at offset {offset}: {e}")
+        break
+
+    if not items:
+        break
+
+    json.extend(items)
+    print(f"Fetched {len(items)} jobs at offset {offset}. Total so far: {len(json)}")
+
+    if len(items) < PAGE_SIZE:
+        break
+
+    offset += PAGE_SIZE
+    delay = random.uniform(REQUEST_DELAY_MIN, REQUEST_DELAY_MAX)
+    print(f"Sleeping {delay:.2f} second(s) before next BestJobs request...")
+    time.sleep(delay)
 
 companies = {}
 
@@ -79,6 +103,7 @@ TOKEN = get_token()
 
 def start(jobs):
     main(jobs.get("jobs"), TOKEN)
+
     if jobs.get("logo"):
         content_type = "application/json"
         requests.post(
