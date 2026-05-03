@@ -27,7 +27,13 @@ def parse_salary(job):
 
 url = "https://api.bestjobs.eu/v1/jobs?offset=0&limit=10000&"
 
-json = requests.get(url).json().get("items")
+try:
+    response = requests.get(url)
+    response.raise_for_status()
+    json = response.json().get("items") or []
+except (requests.exceptions.RequestException, requests.exceptions.JSONDecodeError) as e:
+    print(f"Failed to fetch jobs: {e}")
+    json = []
 
 companies = {}
 
