@@ -31,7 +31,7 @@ try:
     response = requests.get(url)
     response.raise_for_status()
     json = response.json().get("items") or []
-except Exception as e:
+except (requests.exceptions.RequestException, requests.exceptions.JSONDecodeError) as e:
     print(f"Failed to fetch jobs: {e}")
     json = []
 
