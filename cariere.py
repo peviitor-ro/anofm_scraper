@@ -14,6 +14,8 @@ BASE_URL = "https://cariere.ro"
 START_URL = f"{BASE_URL}/joburi/"
 REQUEST_DELAY_MIN = 1
 REQUEST_DELAY_MAX = 2.5
+MAX_FETCH_RETRIES = 3
+REQUEST_TIMEOUT = (10, 60)
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -35,6 +37,23 @@ def normalize_counties(city_name):
     if isinstance(county_values, list):
         return county_values
     return [county_values] if county_values else []
+
+
+def fetch_partner_page(session, page_url, page):
+    for attempt in range(1, MAX_FETCH_RETRIES + 1):
+        try:
+            print(f"Fetching cariere partner page {page} (attempt {attempt}/{MAX_FETCH_RETRIES}): {page_url}")
+            response = session.get(page_url, timeout=REQUEST_TIMEOUT)
+            response.raise_for_status()
+            return response
+        except requests.exceptions.RequestException as error:
+            if attempt == MAX_FETCH_RETRIES:
+                print(f"Failed to fetch cariere partner page {page}: {error}")
+                return None
+
+            delay = random.uniform(REQUEST_DELAY_MIN, REQUEST_DELAY_MAX) * attempt
+            print(f"Request failed for cariere partner page {page}: {error}. Retrying in {delay:.2f} second(s)...")
+            time.sleep(delay)
 
 
 def parse_partner_card(card, seen_links):
@@ -106,13 +125,18 @@ def scrape_cariere_partner_jobs(start_url=START_URL):
     visited_urls = set()
     page_url = start_url
     page = 1
+    session = requests.Session()
+    session.headers.update(HEADERS)
 
     while page_url and page_url not in visited_urls:
         visited_urls.add(page_url)
         print(f"Scraping cariere partner page {page}: {page_url}")
 
-        response = requests.get(page_url, headers=HEADERS, timeout=30)
-        response.raise_for_status()
+        response = fetch_partner_page(session, page_url, page)
+        if response is None:
+            print(f"Stopping cariere partner pagination after repeated fetch failures on page {page}.")
+            break
+
         soup = BeautifulSoup(response.text, "html.parser")
 
         cards = soup.select(
