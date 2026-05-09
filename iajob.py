@@ -4,13 +4,14 @@ from concurrent.futures import ThreadPoolExecutor
 
 import requests
 from utils import get_token, GetCounty, main, remove_diacritics
-import json
 
 _counties = GetCounty()
 API_URL = "https://api.iajob.ro/v3/search"
 BASE_URL = "https://www.iajob.ro"
 PAGE_SIZE = 20
 REQUEST_DELAY = 1
+MAX_RETRIES = 3
+RETRY_DELAY = 5
 
 
 def parse_salary(salary_text):
@@ -60,22 +61,66 @@ def parse_salary(salary_text):
     return {}
 
 
+def fetch_jobs(offset):
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            response = requests.get(API_URL, params={"offset": offset}, timeout=30)
+
+            if response.status_code >= 500:
+                raise requests.HTTPError(
+                    f"{response.status_code} Server Error",
+                    response=response,
+                )
+
+            response.raise_for_status()
+            data = response.json() or {}
+            return data.get("jobs") or []
+        except requests.HTTPError as exc:
+            status_code = exc.response.status_code if exc.response is not None else None
+
+            if status_code and status_code < 500:
+                raise
+
+            print(
+                f"iajob request failed for offset {offset} "
+                f"(attempt {attempt}/{MAX_RETRIES}): {exc}"
+            )
+        except requests.RequestException as exc:
+            print(
+                f"iajob request error for offset {offset} "
+                f"(attempt {attempt}/{MAX_RETRIES}): {exc}"
+            )
+
+        if attempt < MAX_RETRIES:
+            print(f"Retrying iajob offset {offset} in {RETRY_DELAY} second(s)...")
+            time.sleep(RETRY_DELAY)
+
+    return None
+
+
 companies = {}
 offset = 0
+seen_jobs = set()
 
 while True:
     print(f"Scraping iajob offset {offset}...")
-    response = requests.get(API_URL, params={"offset": offset}, timeout=30)
-    response.raise_for_status()
-    data = response.json() or {}
-    jobs = data.get("jobs") or []
+    jobs = fetch_jobs(offset)
+    if jobs is None:
+        print(f"Stopping iajob scrape after repeated errors at offset {offset}.")
+        break
+
     print(f"Found {len(jobs)} jobs at offset {offset}")
 
     if not jobs:
         print(f"No jobs found at offset {offset}. Stopping.")
         break
 
+    new_jobs_on_page = 0
     for job in jobs:
+        job_key = job.get("uuid") or job.get("slug_id")
+        if job_key in seen_jobs:
+            continue
+
         company = remove_diacritics((job.get("employer_name") or "").strip())
         title = remove_diacritics((job.get("title") or "").strip())
         slug_id = job.get("slug_id")
@@ -117,6 +162,12 @@ while True:
             job_data["date"] = posting_date
 
         companies[company]["jobs"].append(job_data)
+        seen_jobs.add(job_key)
+        new_jobs_on_page += 1
+
+    if new_jobs_on_page == 0:
+        print(f"No new jobs found at offset {offset}. Stopping.")
+        break
 
     print(f"Sleeping {REQUEST_DELAY} second(s) before next iajob batch...")
     time.sleep(REQUEST_DELAY)
