@@ -3,7 +3,6 @@ name: Cariere General point run Scraper
 on:
   schedule:
     - cron: '30 0 * * *'
-      timezone: Europe/Bucharest
   workflow_dispatch:
 
 permissions:
