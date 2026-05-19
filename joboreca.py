@@ -180,17 +180,20 @@ TOKEN = get_token()
 def start(jobs):
     if jobs.get("jobs"):
         all_jobs = jobs.get("jobs")
-        batch_size = 100
-        total_batches = (len(all_jobs) + batch_size - 1) // batch_size
+        if len(all_jobs) > 1000:
+            batch_size = 100
+            total_batches = (len(all_jobs) + batch_size - 1) // batch_size
 
-        print(f"Processing {len(all_jobs)} jobs in {total_batches} batches...")
+            print(f"Processing {len(all_jobs)} jobs in {total_batches} batches...")
 
-        for i in range(0, len(all_jobs), batch_size):
-            batch = all_jobs[i:i + batch_size]
-            batch_num = i // batch_size + 1
-            print(f"Sending batch {batch_num}/{total_batches} ({len(batch)} jobs)...")
-            main(batch, TOKEN, user=True)
-            time.sleep(2)
+            for i in range(0, len(all_jobs), batch_size):
+                batch = all_jobs[i:i + batch_size]
+                batch_num = i // batch_size + 1
+                print(f"Sending batch {batch_num}/{total_batches} ({len(batch)} jobs)...")
+                main(batch, TOKEN, user=True)
+                time.sleep(2)
+        else:
+            main(all_jobs, TOKEN)
 
 
 if __name__ == "__main__":
