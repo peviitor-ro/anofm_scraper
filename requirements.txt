@@ -5,4 +5,4 @@ requests==2.32.3
 urllib3==2.2.3
 beautifulsoup4==4.12.3
 python-dotenv
-
+playwright==1.52.0

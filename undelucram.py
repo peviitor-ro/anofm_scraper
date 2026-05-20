@@ -5,6 +5,7 @@ from urllib.parse import urljoin
 
 import requests
 from bs4 import BeautifulSoup
+from playwright.sync_api import sync_playwright
 
 from utils import GetCounty, get_token, main, remove_company, remove_diacritics
 
@@ -20,24 +21,6 @@ HEADERS = {
 _counties = GetCounty()
 
 
-def create_session():
-    session = requests.Session()
-    session.headers.update(HEADERS)
-    return session
-
-
-def get_html(session, url, params=None, timeout=30):
-    response = session.get(url, params=params, timeout=timeout)
-
-    if response.status_code == 403:
-        # Warm up the session and retry once with site cookies.
-        session.get(f"{BASE_URL}/ro", timeout=timeout)
-        response = session.get(url, params=params, timeout=timeout)
-
-    response.raise_for_status()
-    return response
-
-
 def parse_salary(text):
     normalized = remove_diacritics((text or "").lower())
     matches = re.findall(r"\d[\d\.\s]*", normalized)
@@ -45,7 +28,6 @@ def parse_salary(text):
         return {}
 
     amounts = [int(match.replace(".", "").replace(" ", "")) for match in matches]
-
     currency = None
     if "eur" in normalized or "euro" in normalized or "€" in (text or ""):
         currency = "EUR"
@@ -95,10 +77,30 @@ def parse_location(location_text):
     return city_text, county, remote
 
 
-def fetch_total_pages(session):
-    response = get_html(session, LIST_URL)
+def fetch_html(page, url):
+    page.goto(url, wait_until="load", timeout=120000)
+    page.wait_for_timeout(1500)
+    return page.content()
 
-    soup = BeautifulSoup(response.text, "html.parser")
+
+def session_from_context(context):
+    session = requests.Session()
+    session.headers.update(HEADERS)
+
+    for cookie in context.cookies():
+        session.cookies.set(
+            cookie["name"],
+            cookie["value"],
+            domain=cookie.get("domain"),
+            path=cookie.get("path"),
+        )
+
+    return session
+
+
+def fetch_total_pages(page):
+    html = fetch_html(page, LIST_URL)
+    soup = BeautifulSoup(html, "html.parser")
     pages = []
 
     for anchor in soup.select('a[href*="/ro/locuri-de-munca?page="]'):
@@ -119,11 +121,11 @@ def fetch_total_pages(session):
     return 1
 
 
-def parse_page(session, page_number):
-    response = get_html(session, LIST_URL, params={"page": page_number})
-
-    soup = BeautifulSoup(response.text, "html.parser")
+def parse_page(html):
+    soup = BeautifulSoup(html, "html.parser")
     jobs = []
+    seen_links = set()
+
     for card in soup.select("div.jobs-item"):
         title_tag = card.select_one('a[href*="/ro/locuri-de-munca/"] h4')
         title_anchor = title_tag.find_parent("a") if title_tag else None
@@ -133,7 +135,10 @@ def parse_page(session, page_number):
         job_url = urljoin(BASE_URL, title_anchor.get("href") or "")
         if not re.search(r"/ro/locuri-de-munca/.+/\d+$", job_url):
             continue
+        if job_url in seen_links:
+            continue
 
+        seen_links.add(job_url)
         title = title_tag.get_text(" ", strip=True) if title_tag else ""
         company_tag = card.select_one("h5")
         company = company_tag.get_text(" ", strip=True) if company_tag else "Undelucram"
@@ -166,35 +171,43 @@ def parse_page(session, page_number):
 
 
 def scrape_undelucram():
-    session = create_session()
-    total_pages = fetch_total_pages(session)
-    print(f"Total pages: {total_pages}")
-
     companies = {}
     seen_links = set()
 
-    for page_number in range(1, total_pages + 1):
-        print(f"Scraping page {page_number}/{total_pages}...")
-        page_jobs = parse_page(session, page_number)
-        added = 0
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        context = browser.new_context(locale="ro-RO")
+        page = context.new_page()
 
-        for job in page_jobs:
-            link = job.get("job_link")
-            if not link or link in seen_links:
-                continue
+        total_pages = fetch_total_pages(page)
+        print(f"Total pages: {total_pages}")
+        session = session_from_context(context)
 
-            seen_links.add(link)
-            company = job["company"]
+        for page_number in range(1, total_pages + 1):
+            print(f"Scraping page {page_number}/{total_pages}...")
+            html = fetch_html(page, f"{LIST_URL}?page={page_number}")
+            page_jobs = parse_page(html)
+            added = 0
 
-            if company not in companies:
-                companies[company] = {"name": company, "logo": None, "jobs": []}
+            for job in page_jobs:
+                link = job.get("job_link")
+                if not link or link in seen_links:
+                    continue
 
-            companies[company]["jobs"].append(job)
-            added += 1
+                seen_links.add(link)
+                company = job["company"]
 
-        print(f"Found {added} new jobs on page {page_number}")
-        time.sleep(1)
-        
+                if company not in companies:
+                    companies[company] = {"name": company, "logo": None, "jobs": []}
+
+                companies[company]["jobs"].append(job)
+                added += 1
+
+            print(f"Found {added} new jobs on page {page_number}")
+            time.sleep(1)
+
+        browser.close()
+
     return companies
 
 

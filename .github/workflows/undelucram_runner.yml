@@ -25,6 +25,10 @@ jobs:
         python3 -m pip install --upgrade pip
         pip3 install -r requirements.txt
 
+    - name: Install Playwright Chromium
+      run: |
+        python3 -m playwright install --with-deps chromium
+
     - name: Run Scraper
       env:
         SERVER_URL: ${{ vars.SERVER_URL }}
