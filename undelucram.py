@@ -78,10 +78,40 @@ def parse_location(location_text):
 
 
 def fetch_total_pages():
-    response = requests.get(JOBS_SITEMAP, headers=HEADERS, timeout=30)
+    try:
+        response = requests.get(JOBS_SITEMAP, headers=HEADERS, timeout=30)
+        if response.status_code == 200:
+            pages = re.findall(r"/ro/locuri-de-munca\?page=(\d+)", response.text)
+            total_pages = max((int(page) for page in pages), default=1)
+            if total_pages > 1:
+                return total_pages
+
+        print(f"Sitemap unavailable for Undelucram ({response.status_code}). Falling back to listing page pagination.")
+    except requests.RequestException as error:
+        print(f"Failed to fetch Undelucram sitemap: {error}. Falling back to listing page pagination.")
+
+    response = requests.get(LIST_URL, headers=HEADERS, timeout=30)
     response.raise_for_status()
-    pages = re.findall(r"/ro/locuri-de-munca\?page=(\d+)", response.text)
-    return max((int(page) for page in pages), default=1)
+
+    soup = BeautifulSoup(response.text, "html.parser")
+    pages = []
+
+    for anchor in soup.select('a[href*="/ro/locuri-de-munca?page="]'):
+        href = anchor.get("href") or ""
+        match = re.search(r"[?&]page=(\d+)", href)
+        if match:
+            pages.append(int(match.group(1)))
+
+    if pages:
+        return max(pages)
+
+    text = soup.get_text(" ", strip=True)
+    match = re.search(r"din\s+(\d+)\s+rezultate", text, flags=re.IGNORECASE)
+    if match:
+        total_results = int(match.group(1))
+        return max((total_results + 9) // 10, 1)
+
+    return 1
 
 
 def parse_page(page_number):
