@@ -83,21 +83,6 @@ def fetch_html(page, url):
     return page.content()
 
 
-def session_from_context(context):
-    session = requests.Session()
-    session.headers.update(HEADERS)
-
-    for cookie in context.cookies():
-        session.cookies.set(
-            cookie["name"],
-            cookie["value"],
-            domain=cookie.get("domain"),
-            path=cookie.get("path"),
-        )
-
-    return session
-
-
 def fetch_total_pages(page):
     html = fetch_html(page, LIST_URL)
     soup = BeautifulSoup(html, "html.parser")
@@ -181,7 +166,6 @@ def scrape_undelucram():
 
         total_pages = fetch_total_pages(page)
         print(f"Total pages: {total_pages}")
-        session = session_from_context(context)
 
         for page_number in range(1, total_pages + 1):
             print(f"Scraping page {page_number}/{total_pages}...")
