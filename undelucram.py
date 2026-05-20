@@ -20,6 +20,24 @@ HEADERS = {
 _counties = GetCounty()
 
 
+def create_session():
+    session = requests.Session()
+    session.headers.update(HEADERS)
+    return session
+
+
+def get_html(session, url, params=None, timeout=30):
+    response = session.get(url, params=params, timeout=timeout)
+
+    if response.status_code == 403:
+        # Warm up the session and retry once with site cookies.
+        session.get(f"{BASE_URL}/ro", timeout=timeout)
+        response = session.get(url, params=params, timeout=timeout)
+
+    response.raise_for_status()
+    return response
+
+
 def parse_salary(text):
     normalized = remove_diacritics((text or "").lower())
     matches = re.findall(r"\d[\d\.\s]*", normalized)
@@ -77,9 +95,8 @@ def parse_location(location_text):
     return city_text, county, remote
 
 
-def fetch_total_pages():
-    response = requests.get(LIST_URL, headers=HEADERS, timeout=30)
-    response.raise_for_status()
+def fetch_total_pages(session):
+    response = get_html(session, LIST_URL)
 
     soup = BeautifulSoup(response.text, "html.parser")
     pages = []
@@ -102,14 +119,8 @@ def fetch_total_pages():
     return 1
 
 
-def parse_page(page_number):
-    response = requests.get(
-        LIST_URL,
-        params={"page": page_number},
-        headers=HEADERS,
-        timeout=30,
-    )
-    response.raise_for_status()
+def parse_page(session, page_number):
+    response = get_html(session, LIST_URL, params={"page": page_number})
 
     soup = BeautifulSoup(response.text, "html.parser")
     jobs = []
@@ -155,7 +166,8 @@ def parse_page(page_number):
 
 
 def scrape_undelucram():
-    total_pages = fetch_total_pages()
+    session = create_session()
+    total_pages = fetch_total_pages(session)
     print(f"Total pages: {total_pages}")
 
     companies = {}
@@ -163,7 +175,7 @@ def scrape_undelucram():
 
     for page_number in range(1, total_pages + 1):
         print(f"Scraping page {page_number}/{total_pages}...")
-        page_jobs = parse_page(page_number)
+        page_jobs = parse_page(session, page_number)
         added = 0
 
         for job in page_jobs:
