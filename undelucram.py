@@ -1,6 +1,7 @@
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor
+from urllib.parse import urljoin
 
 import requests
 from bs4 import BeautifulSoup
@@ -9,7 +10,6 @@ from utils import GetCounty, get_token, main, remove_company, remove_diacritics
 
 BASE_URL = "https://www.undelucram.ro"
 LIST_URL = f"{BASE_URL}/ro/locuri-de-munca"
-JOBS_SITEMAP = f"{BASE_URL}/sitemaps/jobs-sitemap-ro-1.xml"
 SOURCE = "UNDELUCRAM"
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -78,18 +78,6 @@ def parse_location(location_text):
 
 
 def fetch_total_pages():
-    try:
-        response = requests.get(JOBS_SITEMAP, headers=HEADERS, timeout=30)
-        if response.status_code == 200:
-            pages = re.findall(r"/ro/locuri-de-munca\?page=(\d+)", response.text)
-            total_pages = max((int(page) for page in pages), default=1)
-            if total_pages > 1:
-                return total_pages
-
-        print(f"Sitemap unavailable for Undelucram ({response.status_code}). Falling back to listing page pagination.")
-    except requests.RequestException as error:
-        print(f"Failed to fetch Undelucram sitemap: {error}. Falling back to listing page pagination.")
-
     response = requests.get(LIST_URL, headers=HEADERS, timeout=30)
     response.raise_for_status()
 
@@ -106,9 +94,9 @@ def fetch_total_pages():
         return max(pages)
 
     text = soup.get_text(" ", strip=True)
-    match = re.search(r"din\s+(\d+)\s+rezultate", text, flags=re.IGNORECASE)
+    match = re.search(r"din\s+([\d\.]+)\s+rezultate", text, flags=re.IGNORECASE)
     if match:
-        total_results = int(match.group(1))
+        total_results = int(match.group(1).replace(".", ""))
         return max((total_results + 9) // 10, 1)
 
     return 1
@@ -131,7 +119,7 @@ def parse_page(page_number):
         if not title_anchor:
             continue
 
-        job_url = title_anchor.get("href") or ""
+        job_url = urljoin(BASE_URL, title_anchor.get("href") or "")
         if not re.search(r"/ro/locuri-de-munca/.+/\d+$", job_url):
             continue
 
