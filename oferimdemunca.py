@@ -174,11 +174,7 @@ def scrape_oferimdemunca():
             if page_number < total_pages:
                 import time
                 time.sleep(1)
-
-            if page_number == 5:  # Limit to first 5 pages for testing
-                print("Reached page limit for testing. Stopping.")
-                break
-
+                
     return companies
 
 
