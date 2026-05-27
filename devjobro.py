@@ -1,7 +1,6 @@
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
 
 import requests
 from bs4 import BeautifulSoup
@@ -117,7 +116,6 @@ def parse_item(item):
     title = item.findtext("title", "")
     link = item.findtext("link", "")
     description = item.findtext("description", "")
-    pubdate = item.findtext("pubDate", "")
 
     if not title or not link:
         return None
@@ -172,14 +170,6 @@ def parse_item(item):
     elif "uk " in desc_text or "united kingdom" in desc_text or "england" in desc_text:
         country = "United Kingdom"
 
-    date = ""
-    if pubdate:
-        try:
-            parsed = datetime.strptime(pubdate.replace("GMT", "").strip(), "%a, %d %b %Y %H:%M:%S ")
-            date = parsed.strftime("%Y-%m-%d")
-        except (ValueError, IndexError):
-            pass
-
     return company, {
         "job_title": title_text,
         "job_link": clean_link,
@@ -190,7 +180,6 @@ def parse_item(item):
         "company": company,
         "source": SOURCE,
         "remote": remote,
-        "date": date,
     }
 
 
