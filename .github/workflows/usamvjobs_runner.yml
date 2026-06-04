@@ -39,11 +39,38 @@ jobs:
     - name: Connect OpenVPN
       run: |
         sudo openvpn --config openvpn.ovpn --daemon --log openvpn.log
-        sleep 20
+        for i in $(seq 1 12); do
+          if test -f openvpn.log && grep -q "Initialization Sequence Completed" openvpn.log; then
+            echo "OpenVPN connected"
+            exit 0
+          fi
+          sleep 5
+        done
+        cat openvpn.log
+        exit 1
 
     - name: Check VPN public IP
       run: |
-        python3 -c "import requests; print(requests.get('https://httpbin.org/ip', timeout=20).text)"
+        python3 - <<'PY'
+        import requests
+
+        urls = [
+            "https://api.ipify.org?format=json",
+            "https://ifconfig.me/all.json",
+            "https://httpbin.org/ip",
+        ]
+
+        for url in urls:
+            try:
+                response = requests.get(url, timeout=20)
+                response.raise_for_status()
+                print(response.text)
+                break
+            except Exception as exc:
+                print(f"{url} failed: {exc}")
+        else:
+            print("Public IP check failed, but OpenVPN connection was established.")
+        PY
 
     - name: Run Scraper
       env:
