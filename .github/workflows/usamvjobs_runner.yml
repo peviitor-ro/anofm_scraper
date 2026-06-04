@@ -25,8 +25,33 @@ jobs:
         python3 -m pip install --upgrade pip
         pip3 install -r requirements.txt
 
+    - name: Install OpenVPN
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y openvpn
+
+    - name: Restore OpenVPN config
+      env:
+        OPENVPN_CONFIG_B64: ${{ secrets.OPENVPN_CONFIG_B64 }}
+      run: |
+        python3 -c "import base64, os; open('openvpn.ovpn', 'wb').write(base64.b64decode(os.environ['OPENVPN_CONFIG_B64']))"
+
+    - name: Connect OpenVPN
+      run: |
+        sudo openvpn --config openvpn.ovpn --daemon --log openvpn.log
+        sleep 20
+
+    - name: Check VPN public IP
+      run: |
+        python3 -c "import requests; print(requests.get('https://httpbin.org/ip', timeout=20).text)"
+
     - name: Run Scraper
       env:
         SERVER_URL: ${{ vars.SERVER_URL }}
       run: |
         python3 usamvjobs.py
+
+    - name: Show OpenVPN log on failure
+      if: failure()
+      run: |
+        test -f openvpn.log && cat openvpn.log || true

@@ -1,3 +1,4 @@
+import random
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -184,6 +185,7 @@ def parse_job_type(class_list):
 
 def fetch_detail(url):
     try:
+        time.sleep(random.uniform(1.0, 1.5))
         resp = requests.get(url, headers=DETAIL_HEADERS, timeout=15)
         resp.raise_for_status()
         soup = BeautifulSoup(resp.text, "html.parser")
@@ -306,7 +308,7 @@ def scrape_usamvjobs():
         print(f"  Fetching details for {len(urls_to_fetch)} jobs...")
 
         detail_cache = {}
-        with ThreadPoolExecutor(max_workers=5) as executor:
+        with ThreadPoolExecutor(max_workers=2) as executor:
             fut_to_link = {executor.submit(fetch_detail, link): link for link, _ in urls_to_fetch}
             for fut in as_completed(fut_to_link):
                 link = fut_to_link[fut]
