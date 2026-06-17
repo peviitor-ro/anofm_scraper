@@ -3,12 +3,11 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 import requests
-from utils import get_token, GetCounty, main, remove_diacritics
+from utils import get_token, GetCounty, remove_diacritics, remove_company, publish_jobs
 
 _counties = GetCounty()
 API_URL = "https://api.iajob.ro/v3/search"
 BASE_URL = "https://www.iajob.ro"
-PAGE_SIZE = 20
 REQUEST_DELAY = 1
 MAX_RETRIES = 3
 RETRY_DELAY = 5
@@ -98,92 +97,108 @@ def fetch_jobs(offset):
     return None
 
 
-companies = {}
-offset = 0
-seen_jobs = set()
+def scrape_all_jobs():
+    companies = {}
+    seen_jobs = {}
+    offset = 0
 
-while True:
-    print(f"Scraping iajob offset {offset}...")
-    jobs = fetch_jobs(offset)
-    if jobs is None:
-        print(f"Stopping iajob scrape after repeated errors at offset {offset}.")
-        break
+    while True:
+        print(f"Scraping iajob offset {offset}...")
+        jobs = fetch_jobs(offset)
+        if jobs is None:
+            print(f"Stopping iajob scrape after repeated errors at offset {offset}.")
+            break
 
-    print(f"Found {len(jobs)} jobs at offset {offset}")
+        print(f"Found {len(jobs)} jobs at offset {offset}")
 
-    if not jobs:
-        print(f"No jobs found at offset {offset}. Stopping.")
-        break
+        if not jobs:
+            print(f"No jobs found at offset {offset}. Stopping.")
+            break
 
-    new_jobs_on_page = 0
-    for job in jobs:
-        job_key = job.get("uuid") or job.get("slug_id")
-        if job_key in seen_jobs:
-            continue
+        new_jobs_on_page = 0
+        for job in jobs:
+            uuid = job.get("uuid") or job.get("slug_id")
+            if uuid and uuid in seen_jobs:
+                continue
 
-        company = remove_diacritics((job.get("employer_name") or "").strip())
-        title = remove_diacritics((job.get("title") or "").strip())
-        slug_id = job.get("slug_id")
-        locality_name = remove_diacritics((job.get("locality_name") or "").strip())
-        county_name = remove_diacritics((job.get("county_name") or "").strip())
+            company = remove_diacritics((job.get("employer_name") or "").strip())
+            title = remove_diacritics((job.get("title") or "").strip())
+            slug_id = job.get("slug_id")
 
-        if not company or not title or not slug_id:
-            continue
+            if not company or not title or not slug_id or not uuid:
+                continue
 
-        if company not in companies:
-            companies[company] = {"name": company, "logo": None, "jobs": []}
+            if len(company) <= 2 or company == "-":
+                continue
 
-        city = [locality_name] if locality_name else []
-        county = [county_name] if county_name else (_counties.get_county(locality_name) or [] if locality_name else [])
+            if company not in companies:
+                companies[company] = {"name": company, "logo": None, "jobs": []}
 
-        salary_value = job.get("salary") or ""
-        remote = []
-        job_type = remove_diacritics((job.get("job_type") or "").strip()).lower()
-        if "remote" in job_type:
-            remote.append("remote")
-        elif "hibrid" in job_type:
-            remote.append("hybrid")
+            locality_name = remove_diacritics((job.get("locality_name") or "").strip())
+            county_name = remove_diacritics((job.get("county_name") or "").strip())
 
-        job_link = f"{BASE_URL}/locuri-de-munca/{slug_id}"
-        job_data = {
-            "job_title": title,
-            "job_link": job_link,
-            **parse_salary(salary_value),
-            "country": "Romania",
-            "city": city,
-            "county": county,
-            "company": company,
-            "source": "IAJOB",
-            "remote": remote,
-        }
+            city = [locality_name] if locality_name else []
+            county = [county_name] if county_name else (_counties.get_county(locality_name) or [] if locality_name else [])
 
-        posting_date = (job.get("posting_date") or "").strip()
-        if posting_date:
-            job_data["date"] = posting_date
+            salary_value = job.get("salary") or ""
+            remote = []
+            job_type = remove_diacritics((job.get("job_type") or "").strip()).lower()
+            if "remote" in job_type:
+                remote.append("remote")
+            elif "hibrid" in job_type:
+                remote.append("hybrid")
 
-        companies[company]["jobs"].append(job_data)
-        seen_jobs.add(job_key)
-        new_jobs_on_page += 1
+            job_link = f"{BASE_URL}/locuri-de-munca/{slug_id}"
 
-    if new_jobs_on_page == 0:
-        print(f"No new jobs found at offset {offset}. Stopping.")
-        break
+            job_data = {
+                "job_title": title,
+                "job_link": job_link,
+                **parse_salary(salary_value),
+                "country": "Romania",
+                "city": city,
+                "county": county,
+                "company": company,
+                "source": "IAJOB",
+                "remote": remote,
+            }
 
-    print(f"Sleeping {REQUEST_DELAY} second(s) before next iajob batch...")
-    time.sleep(REQUEST_DELAY)
-    offset += PAGE_SIZE
+            companies[company]["jobs"].append(job_data)
+            seen_jobs[uuid] = True
+            new_jobs_on_page += 1
 
-TOKEN = get_token()
+        if new_jobs_on_page == 0:
+            print(f"No new jobs found at offset {offset}. Stopping.")
+            break
 
+        print(f"Sleeping {REQUEST_DELAY} second(s) before next iajob batch...")
+        time.sleep(REQUEST_DELAY)
+        offset += 20
 
-def start(jobs):
-    main(jobs.get("jobs"), TOKEN)
+    return companies
 
 
-MAX_WORKERS = 5
-with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-    for company_id, jobs in companies.items():
-        executor.submit(start, jobs)
+def start(company_jobs, token):
+    result = publish_jobs(company_jobs, token, user=True)
+    if isinstance(result, list):
+        print(f"Published {len(result)} jobs for {company_jobs[0].get('company')}")
+    else:
+        print(f"Failed to publish for {company_jobs[0].get('company')}: {str(result)[:200]}")
 
-total_jobs = sum(len(company["jobs"]) for company in companies.values())
-print(f"Total jobs parsed: {total_jobs}")
+
+if __name__ == "__main__":
+    token = get_token()
+    print("Token obtained successfully")
+
+    remove_company("IAJOB", token)
+    print("Company IAJOB reset")
+
+    companies = scrape_all_jobs()
+
+    total_jobs = sum(len(c["jobs"]) for c in companies.values())
+    print(f"Total jobs parsed: {total_jobs} from {len(companies)} companies")
+
+    MAX_WORKERS = 5
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        for company_jobs in companies.values():
+            if company_jobs["jobs"]:
+                executor.submit(start, company_jobs["jobs"], token)
