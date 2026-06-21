@@ -40,13 +40,13 @@ jobs:
       run: |
         sudo openvpn --config openvpn.ovpn --daemon --log openvpn.log
         for i in $(seq 1 12); do
-          if test -f openvpn.log && grep -q "Initialization Sequence Completed" openvpn.log; then
+          if test -f openvpn.log && sudo grep -q "Initialization Sequence Completed" openvpn.log; then
             echo "OpenVPN connected"
             exit 0
           fi
           sleep 5
         done
-        cat openvpn.log
+        sudo cat openvpn.log
         exit 1
 
     - name: Check VPN public IP
@@ -81,4 +81,4 @@ jobs:
     - name: Show OpenVPN log on failure
       if: failure()
       run: |
-        test -f openvpn.log && cat openvpn.log || true
+        test -f openvpn.log && sudo cat openvpn.log || true
