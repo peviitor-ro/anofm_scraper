@@ -29,8 +29,38 @@ jobs:
       run: |
         python3 -m playwright install --with-deps chromium
 
+    - name: Install OpenVPN
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y openvpn
+
+    - name: Restore OpenVPN config
+      env:
+        OPENVPN_CONFIG_B64: ${{ secrets.OPENVPN_CONFIG_B64 }}
+      run: |
+        python3 -c "import base64, os; open('openvpn.ovpn', 'wb').write(base64.b64decode(os.environ['OPENVPN_CONFIG_B64']))"
+
+    - name: Connect OpenVPN
+      run: |
+        sudo openvpn --config openvpn.ovpn --daemon --log openvpn.log --allow-compression yes
+        for i in $(seq 1 12); do
+          if test -f openvpn.log && sudo grep -q "Initialization Sequence Completed" openvpn.log; then
+            echo "OpenVPN connected"
+            exit 0
+          fi
+          sleep 5
+        done
+        echo "OpenVPN did not connect within 60s. Checking for errors in log..."
+        sudo cat openvpn.log
+        exit 1
+
     - name: Run Scraper
       env:
         SERVER_URL: ${{ vars.SERVER_URL }}
       run: |
         python3 multijobs.py
+
+    - name: Show OpenVPN log on failure
+      if: failure()
+      run: |
+        test -f openvpn.log && sudo cat openvpn.log || true

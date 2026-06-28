@@ -21,35 +21,35 @@ HEADERS = {
 }
 
 
-def parse_salary(text):
-    normalized = remove_diacritics((text or "").lower())
-    matches = re.findall(r"\d[\d\.\s]*", normalized)
-    if not matches:
-        return {}
-
-    amounts = [int(match.replace(".", "").replace(" ", "")) for match in matches]
-    currency = None
-
-    if "eur" in normalized or "euro" in normalized or "€" in (text or ""):
-        currency = "EUR"
-    elif "lei" in normalized or "ron" in normalized:
-        currency = "RON"
-
-    if not currency:
-        return {}
-
-    if len(amounts) == 1:
-        return {
-            "salary_min": amounts[0],
-            "salary_max": amounts[0],
-            "salary_currency": currency,
-        }
-
-    return {
-        "salary_min": amounts[0],
-        "salary_max": amounts[1],
-        "salary_currency": currency,
-    }
+# def parse_salary(text):
+#     normalized = remove_diacritics((text or "").lower())
+#     matches = re.findall(r"\d[\d\.\s]*", normalized)
+#     if not matches:
+#         return {}
+#
+#     amounts = [int(match.replace(".", "").replace(" ", "")) for match in matches]
+#     currency = None
+#
+#     if "eur" in normalized or "euro" in normalized or "€" in (text or ""):
+#         currency = "EUR"
+#     elif "lei" in normalized or "ron" in normalized:
+#         currency = "RON"
+#
+#     if not currency:
+#         return {}
+#
+#     if len(amounts) == 1:
+#         return {
+#             "salary_min": amounts[0],
+#             "salary_max": amounts[0],
+#             "salary_currency": currency,
+#         }
+#
+#     return {
+#         "salary_min": amounts[0],
+#         "salary_max": amounts[1],
+#         "salary_currency": currency,
+#     }
 
 
 def parse_location(location_text):
@@ -166,25 +166,25 @@ def parse_detail_page(html, listing_job):
 
     city, county, remote = parsed_location
 
-    salary_text = ""
-    in_salary_section = False
-    for marker in soup.stripped_strings:
-        normalized_marker = remove_diacritics(marker.lower())
-        if "venit net oferit" in normalized_marker:
-            in_salary_section = True
-            continue
-
-        if in_salary_section and any(currency in normalized_marker for currency in ("lei", "ron", "eur", "€")):
-            salary_text = marker
-            break
-
-        if in_salary_section and any(section in normalized_marker for section in ("descriere job", "descriere companie", "aplica acum")):
-            break
+    # salary_text = ""
+    # in_salary_section = False
+    # for marker in soup.stripped_strings:
+    #     normalized_marker = remove_diacritics(marker.lower())
+    #     if "venit net oferit" in normalized_marker:
+    #         in_salary_section = True
+    #         continue
+    #
+    #     if in_salary_section and any(currency in normalized_marker for currency in ("lei", "ron", "eur", "€")):
+    #         salary_text = marker
+    #         break
+    #
+    #     if in_salary_section and any(section in normalized_marker for section in ("descriere job", "descriere companie", "aplica acum")):
+    #         break
 
     return {
         "job_title": listing_job["job_title"],
         "job_link": listing_job["job_link"],
-        **parse_salary(salary_text),
+        # **parse_salary(salary_text),
         "country": "Romania",
         "city": [city] if city else [],
         "county": county,
