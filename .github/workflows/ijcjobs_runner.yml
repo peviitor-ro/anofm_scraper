@@ -38,12 +38,17 @@ jobs:
 
     - name: Connect OpenVPN
       run: |
-        sudo openvpn --config openvpn.ovpn --daemon --log openvpn.log
-        sleep 20
-
-    - name: Check VPN public IP
-      run: |
-        python3 -c "import requests; print(requests.get('https://httpbin.org/ip', timeout=20).text)"
+        sudo openvpn --config openvpn.ovpn --daemon --log openvpn.log --allow-compression yes
+        for i in $(seq 1 12); do
+          if test -f openvpn.log && sudo grep -q "Initialization Sequence Completed" openvpn.log; then
+            echo "OpenVPN connected"
+            exit 0
+          fi
+          sleep 5
+        done
+        echo "OpenVPN did not connect within 60s. Checking for errors in log..."
+        sudo cat openvpn.log
+        exit 1
 
     - name: Run Scraper
       env:
@@ -54,4 +59,4 @@ jobs:
     - name: Show OpenVPN log on failure
       if: failure()
       run: |
-        test -f openvpn.log && cat openvpn.log || true
+        test -f openvpn.log && sudo cat openvpn.log || true
