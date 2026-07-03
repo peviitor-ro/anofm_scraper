@@ -1,4 +1,5 @@
 import unicodedata
+import time
 import requests
 
 import os
@@ -125,14 +126,27 @@ class GetCounty:
         api_endpoint = f"https://api.laurentiumarian.ro/orase/?search={remove_diacritics(city)}&page_size=50"
         counties_found = []
 
-        response = requests.get(api_endpoint).json()
+        for attempt in range(3):
+            try:
+                response = requests.get(api_endpoint, timeout=15)
+                response.raise_for_status()
+                data = response.json()
+                break
+            except (requests.RequestException, ValueError) as e:
+                print(f"GetCounty attempt {attempt + 1}/3 failed for {city}: {e}")
+                if attempt == 2:
+                    return None
+                time.sleep(2 ** attempt)
 
-        while response and response.get("next"):
-            counties_found.extend(response.get("results"))
-            response = requests.get(response.get("next")).json()
+        while data and data.get("next"):
+            counties_found.extend(data.get("results"))
+            try:
+                data = requests.get(data.get("next"), timeout=15).json()
+            except (requests.RequestException, ValueError):
+                break
         else:
-            if response:
-                counties_found.extend(response.get("results"))
+            if data:
+                counties_found.extend(data.get("results"))
 
         self.counties.append(
             {
