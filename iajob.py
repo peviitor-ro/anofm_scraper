@@ -1,16 +1,46 @@
 import re
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 from utils import get_token, GetCounty, remove_diacritics, remove_company, publish_jobs
 
 _counties = GetCounty()
-API_URL = "https://api.iajob.ro/v3/search"
+API_URL = "https://api.iajob.ro/v4/search"
 BASE_URL = "https://www.iajob.ro"
+SOURCE = "IAJOB"
+PAGE_SIZE = 100
 REQUEST_DELAY = 1
 MAX_RETRIES = 3
 RETRY_DELAY = 5
+MAX_WORKERS = 5
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept": "application/json",
+    "Accept-Language": "ro-RO,ro;q=0.9,en;q=0.8",
+}
+
+
+def to_amount(value):
+    if value is None or value == "":
+        return None
+
+    if isinstance(value, str):
+        cleaned = re.sub(r"[^\d,.-]", "", value)
+
+        if re.fullmatch(r"\d{1,3}([.,]\d{3})+", cleaned):
+            cleaned = cleaned.replace(",", "").replace(".", "")
+        elif re.fullmatch(r"\d+,\d{1,2}", cleaned):
+            cleaned = cleaned.replace(",", ".")
+
+        value = cleaned
+
+    try:
+        amount = int(float(value))
+    except (TypeError, ValueError):
+        return None
+
+    return amount or None
 
 
 def parse_salary(salary_text):
@@ -18,19 +48,23 @@ def parse_salary(salary_text):
         return {}
 
     if isinstance(salary_text, dict):
-        amount_from = salary_text.get("amount_from")
-        amount_to = salary_text.get("amount_to")
         currency = (salary_text.get("currency") or "").upper()
 
         if currency == "LEI":
             currency = "RON"
 
+        if currency not in {"RON", "EUR"}:
+            return {}
+
         salary_data = {}
+        amount_from = to_amount(salary_text.get("min"))
+        amount_to = to_amount(salary_text.get("max"))
+
         if amount_from is not None:
-            salary_data["salary_min"] = int(float(amount_from))
+            salary_data["salary_min"] = amount_from
         if amount_to is not None:
-            salary_data["salary_max"] = int(float(amount_to))
-        if salary_data and currency in {"RON", "EUR"}:
+            salary_data["salary_max"] = amount_to
+        if salary_data:
             salary_data["salary_currency"] = currency
 
         return salary_data
@@ -42,8 +76,8 @@ def parse_salary(salary_text):
         if currency == "LEI":
             currency = "RON"
         return {
-            "salary_min": int(match.group(1).replace(".", "")),
-            "salary_max": int(match.group(2).replace(".", "")),
+            "salary_min": to_amount(match.group(1).replace(".", "")),
+            "salary_max": to_amount(match.group(2).replace(".", "")),
             "salary_currency": currency,
         }
 
@@ -53,7 +87,7 @@ def parse_salary(salary_text):
         if currency == "LEI":
             currency = "RON"
         return {
-            "salary_min": int(single.group(1).replace(".", "")),
+            "salary_min": to_amount(single.group(1).replace(".", "")),
             "salary_currency": currency,
         }
 
@@ -63,7 +97,12 @@ def parse_salary(salary_text):
 def fetch_jobs(offset):
     for attempt in range(1, MAX_RETRIES + 1):
         try:
-            response = requests.get(API_URL, params={"offset": offset}, timeout=30)
+            response = requests.get(
+                API_URL,
+                params={"offset": offset, "limit": PAGE_SIZE},
+                headers=HEADERS,
+                timeout=30,
+            )
 
             if response.status_code >= 500:
                 raise requests.HTTPError(
@@ -77,14 +116,15 @@ def fetch_jobs(offset):
         except requests.HTTPError as exc:
             status_code = exc.response.status_code if exc.response is not None else None
 
-            if status_code and status_code < 500:
-                raise
+            if status_code != 429 and not (status_code and status_code >= 500):
+                print(f"iajob request rejected for offset {offset}: {exc}")
+                return None
 
             print(
                 f"iajob request failed for offset {offset} "
                 f"(attempt {attempt}/{MAX_RETRIES}): {exc}"
             )
-        except requests.RequestException as exc:
+        except (requests.RequestException, ValueError) as exc:
             print(
                 f"iajob request error for offset {offset} "
                 f"(attempt {attempt}/{MAX_RETRIES}): {exc}"
@@ -131,8 +171,12 @@ def scrape_all_jobs():
             if len(company) <= 2 or company == "-":
                 continue
 
+            logo = job.get("employer_logo_url") or job.get("logo_url")
+
             if company not in companies:
-                companies[company] = {"name": company, "logo": None, "jobs": []}
+                companies[company] = {"name": company, "logo": logo, "jobs": []}
+            elif not companies[company].get("logo") and logo:
+                companies[company]["logo"] = logo
 
             locality_name = remove_diacritics((job.get("locality_name") or "").strip())
             county_name = remove_diacritics((job.get("county_name") or "").strip())
@@ -145,7 +189,7 @@ def scrape_all_jobs():
             job_type = remove_diacritics((job.get("job_type") or "").strip()).lower()
             if "remote" in job_type:
                 remote.append("remote")
-            elif "hibrid" in job_type:
+            elif "hibrid" in job_type or "hybrid" in job_type:
                 remote.append("hybrid")
 
             job_link = f"{BASE_URL}/locuri-de-munca/{slug_id}"
@@ -158,7 +202,7 @@ def scrape_all_jobs():
                 "city": city,
                 "county": county,
                 "company": company,
-                "source": "IAJOB",
+                "source": SOURCE,
                 "remote": remote,
             }
 
@@ -172,7 +216,7 @@ def scrape_all_jobs():
 
         print(f"Sleeping {REQUEST_DELAY} second(s) before next iajob batch...")
         time.sleep(REQUEST_DELAY)
-        offset += 20
+        offset += PAGE_SIZE
 
     return companies
 
@@ -197,8 +241,15 @@ if __name__ == "__main__":
     total_jobs = sum(len(c["jobs"]) for c in companies.values())
     print(f"Total jobs parsed: {total_jobs} from {len(companies)} companies")
 
-    MAX_WORKERS = 5
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        for company_jobs in companies.values():
-            if company_jobs["jobs"]:
-                executor.submit(start, company_jobs["jobs"], token)
+        futures = {
+            executor.submit(start, company_jobs["jobs"], token): company_jobs["name"]
+            for company_jobs in companies.values()
+            if company_jobs["jobs"]
+        }
+
+        for future in as_completed(futures):
+            try:
+                future.result()
+            except Exception as exc:
+                print(f"Failed to publish for {futures[future]}: {str(exc)[:200]}")
