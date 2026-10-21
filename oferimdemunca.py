@@ -1,8 +1,12 @@
+import random
 import re
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 import requests
 from bs4 import BeautifulSoup
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 from utils import GetCounty, get_token, main, remove_company, remove_diacritics
 
@@ -13,9 +17,78 @@ HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "ro-RO,ro;q=0.9,en;q=0.8",
+    "Referer": BASE_URL,
+    # The server advertises "Keep-Alive: timeout=5, max=100": it closes idle
+    # connections after 5s and after 100 requests on the same socket. Reusing
+    # such a socket produces "RemoteDisconnected", so every request gets a
+    # fresh connection instead.
+    "Connection": "close",
 }
 
+REQUEST_TIMEOUT = (10, 60)
+MAX_ATTEMPTS = 4
+RETRY_BACKOFF = 2
+RETRY_BACKOFF_MAX = 15
+RETRY_STATUS_CODES = (429, 500, 502, 503, 504)
+# The archive serves 20 jobs per page, so a full crawl means ~195 requests.
+# The pacing is deliberately slow: the host drops connections coming from
+# datacenter IP ranges (GitHub Actions runners), so the fewer requests we
+# make per minute, the less likely we are to get cut off.
+REQUEST_DELAY_MIN = 3.0
+REQUEST_DELAY_MAX = 5.0
+MAX_CONSECUTIVE_FAILURES = 5
+
 _counties = GetCounty()
+
+
+def build_session():
+    session = requests.Session()
+    session.headers.update(HEADERS)
+
+    retry = Retry(
+        total=3,
+        connect=3,
+        read=3,
+        status=3,
+        backoff_factor=0.5,
+        status_forcelist=RETRY_STATUS_CODES,
+        allowed_methods=frozenset(["GET", "HEAD"]),
+        respect_retry_after_header=True,
+        raise_on_status=False,
+    )
+    adapter = HTTPAdapter(max_retries=retry, pool_connections=1, pool_maxsize=2)
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+
+    return session
+
+
+def fetch_page(session, url):
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        try:
+            response = session.get(url, timeout=REQUEST_TIMEOUT)
+
+            if response.status_code in RETRY_STATUS_CODES:
+                raise requests.exceptions.HTTPError(
+                    f"{response.status_code} Server Error",
+                    response=response,
+                )
+
+            response.raise_for_status()
+            return response.text
+        except requests.exceptions.RequestException as exc:
+            if attempt == MAX_ATTEMPTS:
+                print(f"Failed to fetch {url} after {MAX_ATTEMPTS} attempts: {exc}")
+                return None
+
+            delay = min(RETRY_BACKOFF ** attempt, RETRY_BACKOFF_MAX) + random.uniform(0, 1)
+            print(
+                f"Request failed for {url} (attempt {attempt}/{MAX_ATTEMPTS}): {exc}. "
+                f"Retrying in {delay:.1f} second(s)..."
+            )
+            time.sleep(delay)
+
+    return None
 
 
 def parse_salary(text):
@@ -64,10 +137,8 @@ def parse_location(location_text):
     return city_text, county, remote
 
 
-def fetch_total_pages(session):
-    response = session.get(LIST_URL, timeout=120)
-    response.raise_for_status()
-    soup = BeautifulSoup(response.text, "html.parser")
+def fetch_total_pages(html):
+    soup = BeautifulSoup(html, "html.parser")
     total_text = soup.select_one("span.t-24.fw-normal")
     if total_text:
         match = re.search(r"(\d+)", total_text.get_text())
@@ -142,18 +213,42 @@ def scrape_oferimdemunca():
     companies = {}
     seen_links = set()
 
-    with requests.Session() as session:
-        session.headers.update(HEADERS)
+    with build_session() as session:
+        first_page_html = fetch_page(session, LIST_URL)
 
-        total_pages = fetch_total_pages(session)
+        if first_page_html is None:
+            print("Could not load the first page. Aborting the scrape.")
+            return companies
+
+        total_pages = fetch_total_pages(first_page_html)
         print(f"Total pages: {total_pages}")
+
+        consecutive_failures = 0
 
         for page_number in range(1, total_pages + 1):
             print(f"Scraping page {page_number}/{total_pages}...")
-            url = LIST_URL if page_number == 1 else f"{LIST_URL}?job-page={page_number}"
-            response = session.get(url, timeout=120)
-            response.raise_for_status()
-            page_jobs = parse_page(response.text)
+
+            if page_number == 1:
+                html = first_page_html
+            else:
+                url = f"{LIST_URL}?job-page={page_number}"
+                html = fetch_page(session, url)
+
+            if html is None:
+                consecutive_failures += 1
+                print(f"Skipping page {page_number} because it could not be fetched.")
+
+                if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+                    print(
+                        f"Stopping the scrape after {consecutive_failures} consecutive "
+                        f"failed pages."
+                    )
+                    break
+
+                continue
+
+            consecutive_failures = 0
+            page_jobs = parse_page(html)
             added = 0
 
             for job in page_jobs:
@@ -171,10 +266,10 @@ def scrape_oferimdemunca():
                 added += 1
 
             print(f"Found {added} new jobs on page {page_number}")
+
             if page_number < total_pages:
-                import time
-                time.sleep(1)
-                
+                time.sleep(random.uniform(REQUEST_DELAY_MIN, REQUEST_DELAY_MAX))
+
     return companies
 
 
@@ -193,7 +288,6 @@ def start(jobs):
                 batch_num = i // batch_size + 1
                 print(f"Sending batch {batch_num}/{total_batches} ({len(batch)} jobs)...")
                 main(batch, TOKEN, user=True)
-                import time
                 time.sleep(2)
         else:
             main(all_jobs, TOKEN)
