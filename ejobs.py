@@ -150,6 +150,9 @@ def scrape_jobs():
 
         page += 1
 
+    total_jobs = sum(len(company.get("jobs") or []) for company in companies.values())
+    print(f"Scraped {total_jobs} eJobs jobs from {len(companies)} companies across {page - 1} pages.")
+
     return companies
 
 
@@ -174,14 +177,20 @@ def publish_company(company, token):
 
 def run():
     companies = scrape_jobs()
+    total_jobs = sum(len(company.get("jobs") or []) for company in companies.values())
+    print(f"Publishing {total_jobs} jobs for {len(companies)} companies...")
+
     token = get_token()
     if not token:
         print("Failed to obtain token; aborting publish.")
         return
 
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        for company in companies.values():
-            executor.submit(publish_company, company, token)
+        futures = [executor.submit(publish_company, company, token) for company in companies.values()]
+        for future in futures:
+            future.result()
+
+    print("eJobs scraping finished.")
 
 
 if __name__ == "__main__":
